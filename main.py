@@ -9,6 +9,7 @@ from mysql.connector import Error
 import streamlit as st
 import plotly.express as px
 from PIL import Image
+import sklearn
 
 mydb = mysql.connect(host="localhost",
                      user="root",
