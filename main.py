@@ -1,636 +1,318 @@
-import plotly.express as px
-import json
-import streamlit as st
-from streamlit_option_menu import option_menu
-from PIL import Image
 import pandas as pd
+from sklearn.preprocessing import LabelEncoder
+import numpy as np
+import requests
+import json
+import os
 import mysql.connector as mysql
+from mysql.connector import Error
+import streamlit as st
+import plotly.express as px
+from PIL import Image
 
 mydb = mysql.connect(host="localhost",
                      user="root",
                      password="Aaru@123user",
-                     database="phonepe_data")
-mycursor = mydb.cursor()
+                     database="phonepe_pulse"
+                     )
+mycursor = mydb.cursor(buffered=True)
 
-st.set_page_config(page_title='Phonepe Pulse vizualization',
-                   page_icon="📺",
-                   layout = "wide",
-                   initial_sidebar_state = "expanded")
 
-with st.sidebar:
-    option = option_menu(menu_title='Menu',
-                         options = ['Home','Charts','Maps','About'],
-                         icons=['house',"bar-chart","globe-central-south-asia", "exclamation-circle"])
-if option == 'Home':
-    st.title("Welcome")
-    col1, col2 = st.columns([2,1])
-    with col1:
+def set_page_config():
+    st.set_page_config(
+        page_title="Phonepe Pulse",
+        page_icon="😀"
 
-        st.write('### :violet[Project Name]: Phonepe Pulse Data Visualization and Exploration')
-        st.write('### :violet[Technologies Used]: Github Cloning, Python, Pandas, MySQL, mysql-connector-python, Streamlit, and Plotly')
-        st.write('### :violet[Domain]: Fintech')
-        st.write('''### :violet[Overview]: This project is about a live geo visualization dashboard that displays information and insights from the Phonepe pulse Github repository in an interactive and visually appealing manner.''')
-    with col2:
-        image = Image.open("D:\Phonepe\Phonepepulse\Phonepe.png")
-        st.image(image)
+    )
 
-elif option == 'Charts':
-    Type = st.sidebar.selectbox("**Type**", ("Select One","Transactions", "Users"))
-    st.subheader(f'Select Preferences')
-    col1, col2, col3 = st.columns([1, 1, 1], gap="large")
-    with col1:
-        states = []
-        query = 'Select DISTINCT state From aggregate_transactions'
-        mycursor.execute(query)
-        for i in mycursor:
-            states.append(i[0])
-        all_s = st.checkbox('All_States', True)
-        state = st.selectbox('State', options=states, disabled=all_s)
-    with col2:
-        years = []
-        query = 'Select DISTINCT year From aggregate_transactions'
-        mycursor.execute(query)
-        for i in mycursor:
-            years.append(i[0])
 
-        all_y = st.checkbox('All_Years', True)
-        year = st.slider('Year', min_value = min(years),max_value = max(years),step=1, disabled=all_y)
-        year = tuple([0, year])
-        if all_y:
-            year = tuple(years)
-    with col3:
-        all_q = st.checkbox('All_Quarters', True)
-        quarter = st.slider('Quarter', 1, 4, 1,disabled=all_q)
-        quarter = tuple([0, quarter])
-        if all_q:
-            quarter = (1, 2, 3, 4)
+def selection():
+    selected = st.selectbox("Menu", ["Home", "Top_Charts", "Explore_Data", "About"],
 
-    st.divider()
-    if Type == 'Transactions':
-        col1, col2= st.columns([1, 3], gap="large")
-        with col1:
-            cat = st.radio('On which category', ['Transaction_Type', 'District', 'PinCode'])
-            arc = st.radio('Select one', ['Transaction_Amount', 'Transactions_Count'])
-            chart_type = st.radio('type of chart', ['Pie', 'Bar'])
-        with col2:
-            st.subheader(f'{chart_type} chart of {arc} based on {cat}')
+                            index=0,
+                            key="menu",
+                            help="Select an option from the menu")
 
-            if cat == 'Transaction_Type':
-                if arc == 'Transaction_Amount':
-                    if all_s:
-                        query = f'Select transaction_type Type,sum(transactions_amount) Total_Amount FROM aggregate_transactions where year IN {year} and quarter IN {quarter} GROUP BY transaction_type'
-                    else:
-                        query = f'''Select transaction_type Type,sum(transactions_amount) Total_Amount 
-                                    from (SELECT * 
-                                          FROM aggregate_transactions
-                                          WHERE state = '{state}') sub
-                                    where year IN {year} and quarter IN {quarter} GROUP BY transaction_type'''
-                    mycursor.execute(query)
+    return selected
 
-                    df = pd.DataFrame(mycursor.fetchall(), columns=['Type', 'Total_Amount'])
 
-                    if chart_type == 'Pie':
-                        fig = px.pie(df,
-                                     names='Type',
-                                     values='Total_Amount',
-                                     color='Type')
+def Home():
+    st.markdown("# :violet[Data Visualization and Exploration]")
+    st.markdown("## :violet[A User-Friendly Tool Using Streamlit and Plotly]")
 
-                        fig.update_traces(textposition='inside', textinfo='percent+label')
-                        st.plotly_chart(fig,use_container_width=True)
-                    else:
-                        fig = px.bar(df,
-                                     x='Type',
-                                     y='Total_Amount',
-                                     color='Type')
 
-                        st.plotly_chart(fig, use_container_width=True)
-                elif arc == 'Transactions_Count':
-                    if all_s:
-                        query = f'Select transaction_type Type,sum(transactions_count) Count FROM aggregate_transactions where year IN {year} and quarter IN {quarter} GROUP BY transaction_type'
-                    else:
-                        query = f'''Select transaction_type Type,sum(transactions_count) Count 
-                                    from (SELECT * 
-                                          FROM aggregate_transactions
-                                          WHERE state = '{state}') sub
-                                    where year IN {year} and quarter IN {quarter} GROUP BY transaction_type'''
-                    mycursor.execute(query)
-
-                    df = pd.DataFrame(mycursor.fetchall(), columns=['Type', 'Count'])
-                    if chart_type == 'Pie':
-                        fig = px.pie(df,
-                                     names='Type',
-                                     values='Count',
-                                     color='Type')
-
-                        fig.update_traces(textposition='inside', textinfo='percent+label')
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        fig = px.bar(df,
-                                     x='Type',
-                                     y='Count',
-                                     color='Type')
-
-                        st.plotly_chart(fig, use_container_width=True)
-
-            elif cat == 'District':
-                if arc == 'Transaction_Amount':
-                    if all_s:
-                        query = f'Select district District,sum(transactions_amount) Total_Amount FROM map_transactions where year IN {year} and quarter IN {quarter} GROUP BY District ORDER BY Total_Amount DESC LIMIT 10'
-                    else:
-                        query = f'''Select district District,sum(transactions_amount) Total_Amount 
-                                from (SELECT * 
-                                      FROM map_transactions
-                                      WHERE state = '{state}') sub
-                                where year IN {year} and quarter IN {quarter} GROUP BY District
-                                ORDER BY Total_Amount DESC
-                                LIMIT 10'''
-                    mycursor.execute(query)
-
-                    df = pd.DataFrame(mycursor.fetchall(), columns=['District', 'Total_Amount'])
-
-                    if chart_type == 'Pie':
-                        fig = px.pie(df,
-                                     names='District',
-                                     values='Total_Amount',
-                                     color='District')
-
-                        fig.update_traces(textposition='inside', textinfo='percent+label')
-                        st.plotly_chart(fig,use_container_width=True)
-                    else:
-                        fig = px.bar(df,
-                                     x='District',
-                                     y='Total_Amount',
-                                     color='District')
-
-                        st.plotly_chart(fig, use_container_width=True)
-                elif arc == 'Transactions_Count':
-                    if all_s:
-                        query = f'Select district District,sum(transactions_count) Count FROM map_transactions where year IN {year} and quarter IN {quarter} GROUP BY District ORDER BY COUNT DESC LIMIT 10'
-
-                    else:
-                        query = f'''Select district District,sum(transactions_count) Count 
-                                from (SELECT * 
-                                      FROM map_transactions
-                                      WHERE state = '{state}') sub
-                                where year IN {year} and quarter IN {quarter} GROUP BY District
-                                ORDER BY Count DESC
-                                LIMIT 10'''
-                    mycursor.execute(query)
-
-                    df = pd.DataFrame(mycursor.fetchall(), columns=['District', 'Count'])
-                    if chart_type == 'Pie':
-                        fig = px.pie(df,
-                                     names='District',
-                                     values='Count',
-                                     color='District')
-
-                        fig.update_traces(textposition='inside', textinfo='percent+label')
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        fig = px.bar(df,
-                                     x='District',
-                                     y='Count',
-                                     color='District')
-
-                        st.plotly_chart(fig, use_container_width=True)
-
-            elif cat == 'PinCode':
-                if arc == 'Transaction_Amount':
-                    if all_s:
-                        query = f'Select pincode PinCode,sum(transactions_amount) Total_Amount FROM top_transactions where year IN {year} and quarter IN {quarter} GROUP BY PinCode ORDER BY Total_Amount DESC LIMIT 10'
-
-                    else:
-                        query = f'''Select pincode PinCode,sum(transactions_amount) Total_Amount 
-                            from (SELECT * 
-                                  FROM top_transactions
-                                  WHERE state = '{state}') sub
-                            where year IN {year} and quarter IN {quarter} GROUP BY PinCode
-                            ORDER BY Total_Amount DESC
-                            LIMIT 10'''
-                    mycursor.execute(query)
-
-                    df = pd.DataFrame(mycursor.fetchall(), columns=['PinCode', 'Total_Amount'])
-
-                    if chart_type == 'Pie':
-                        fig = px.pie(df,
-                                     names='PinCode',
-                                     values='Total_Amount',
-                                     color='PinCode')
-
-                        fig.update_traces(textposition='inside', textinfo='percent+label')
-                        st.plotly_chart(fig,use_container_width=True)
-                    else:
-                        fig = px.bar(df,
-                                     x='PinCode',
-                                     y='Total_Amount',
-                                     color='PinCode')
-
-                        st.plotly_chart(fig, use_container_width=True)
-                elif arc == 'Transactions_Count':
-                    if all_s:
-                        query = f'Select pincode PinCode,sum(transactions_count) Count FROM top_transactions where year IN {year} and quarter IN {quarter} GROUP BY PinCode ORDER BY COUNT DESC LIMIT 10'
-                    else:
-                        query = f'''Select pincode PinCode,sum(transactions_count) Count 
-                                from (SELECT * 
-                                      FROM top_transactions
-                                      WHERE state = '{state}') sub
-                                where year IN {year} and quarter IN {quarter} GROUP BY PinCode
-                                ORDER BY COUNT DESC
-                                LIMIT 10'''
-                    mycursor.execute(query)
-
-                    df = pd.DataFrame(mycursor.fetchall(), columns=['PinCode', 'Count'])
-                    if chart_type == 'Pie':
-                        fig = px.pie(df,
-                                     names='PinCode',
-                                     values='Count',
-                                     color='PinCode')
-
-                        fig.update_traces(textposition='inside', textinfo='percent+label')
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        fig = px.bar(df,
-                                     x='PinCode',
-                                     y='Count',
-                                     color='PinCode')
-
-                        st.plotly_chart(fig, use_container_width=True)
-
-    elif Type == 'Users':
-        col1, col2= st.columns([1, 3], gap="large")
-        with col1:
-            cat = st.radio('On which category', ['Brand', 'District', 'PinCode'])
-
-            if cat == 'Brand':
-                arc = st.radio('Select one', ['Users_Count','Percentage'])
-            elif cat == 'District':
-                arc = st.radio('Select one', ['Registered_Users','App_Opens'])
-            else:
-                arc = st.radio('Select one', ['Registered_Users'])
-
-            chart_type = st.radio('type of chart', ['Pie', 'Bar'])
-
-        with col2:
-            st.subheader(f'{chart_type} chart of {arc} based on {cat}')
-
-            if cat == 'Brand':
-                if arc == 'Users_Count':
-                    if all_s:
-                        query = f'Select brand Brand,sum(Users_Count) Total_Users FROM aggregate_users where year IN {year} and quarter IN {quarter} GROUP BY Brand ORDER BY Total_Users DESC LIMIT 10 '
-                    else:
-                        query = f'''Select brand Brand,sum(Users_Count) Total_Users
-                                    from (SELECT * 
-                                          FROM aggregate_users
-                                          WHERE state = '{state}') sub
-                                    where year IN {year} and quarter IN {quarter}
-                                    GROUP BY Brand ORDER BY Total_Users DESC 
-                                    LIMIT 10'''
-                    mycursor.execute(query)
-
-                    df = pd.DataFrame(mycursor.fetchall(), columns=['Brand', 'Total_Users'])
-
-                    if chart_type == 'Pie':
-                        fig = px.pie(df,
-                                     names='Brand',
-                                     values='Total_Users',
-                                     color='Brand')
-
-                        fig.update_traces(textposition='inside', textinfo='percent+label')
-                        st.plotly_chart(fig,use_container_width=True)
-                    else:
-                        fig = px.bar(df,
-                                     x='Brand',
-                                     y='Total_Users',
-                                     color='Brand')
-
-                        st.plotly_chart(fig, use_container_width=True)
-                elif arc == 'Percentage':
-                    if all_s:
-                        query = f'Select brand Brand,sum(percentage) percent FROM aggregate_users where year IN {year} and quarter IN {quarter} GROUP BY Brand ORDER BY percent DESC LIMIT 10 '
-                    else:
-                        query = f'''Select brand Brand,sum(percentage) percent
-                                    from (SELECT * 
-                                          FROM aggregate_users
-                                          WHERE state = '{state}') sub
-                                    where year IN {year} and quarter IN {quarter}
-                                    GROUP BY Brand ORDER BY percent DESC 
-                                    LIMIT 10'''
-                    mycursor.execute(query)
-
-                    df = pd.DataFrame(mycursor.fetchall(), columns=['Brand', 'percent'])
-
-                    if chart_type == 'Pie':
-                        fig = px.pie(df,
-                                     names='Brand',
-                                     values='percent',
-                                     color='Brand')
-
-                        fig.update_traces(textposition='inside', textinfo='percent+label')
-                        st.plotly_chart(fig,use_container_width=True)
-                    else:
-                        fig = px.bar(df,
-                                     x='Brand',
-                                     y='percent',
-                                     color='Brand')
-
-                        st.plotly_chart(fig, use_container_width=True)
-
-            elif cat == 'District':
-                if arc == 'Registered_Users':
-                    if all_s:
-                        query = f'Select district District,sum(Registered_Users) Total_Users FROM map_users where year IN {year} and quarter IN {quarter} GROUP BY District ORDER BY Total_Users DESC LIMIT 10'
-                    else:
-                        query = f'''Select district District,sum(Registered_Users) Total_Users 
-                                from (SELECT * 
-                                      FROM map_users
-                                      WHERE state = '{state}') sub
-                                where year IN {year} and quarter IN {quarter} GROUP BY District
-                                ORDER BY Total_Users DESC
-                                LIMIT 10'''
-                    mycursor.execute(query)
-
-                    df = pd.DataFrame(mycursor.fetchall(), columns=['District', 'Total_Users'])
-
-                    if chart_type == 'Pie':
-                        fig = px.pie(df,
-                                     names='District',
-                                     values='Total_Users',
-                                     color='District')
-
-                        fig.update_traces(textposition='inside', textinfo='percent+label')
-                        st.plotly_chart(fig,use_container_width=True)
-                    else:
-                        fig = px.bar(df,
-                                     x='District',
-                                     y='Total_Users',
-                                     color='District')
-
-                        st.plotly_chart(fig, use_container_width=True)
-                elif arc == 'App_Opens':
-                    if all_s:
-                        query = f'Select district District,sum(App_Opens) App_Opens FROM map_users where year IN {year} and quarter IN {quarter} GROUP BY District ORDER BY App_Opens DESC LIMIT 10'
-
-                    else:
-                        query = f'''Select district District,sum(App_Opens) App_Opens 
-                                from (SELECT * 
-                                      FROM map_users
-                                      WHERE state = '{state}') sub
-                                where year IN {year} and quarter IN {quarter} GROUP BY District
-                                ORDER BY App_Opens DESC
-                                LIMIT 10'''
-                    mycursor.execute(query)
-
-                    df = pd.DataFrame(mycursor.fetchall(), columns=['District', 'App_Opens'])
-                    if chart_type == 'Pie':
-                        fig = px.pie(df,
-                                     names='District',
-                                     values='App_Opens',
-                                     color='District')
-
-                        fig.update_traces(textposition='inside', textinfo='percent+label')
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        fig = px.bar(df,
-                                     x='District',
-                                     y='App_Opens',
-                                     color='District')
-
-                        st.plotly_chart(fig, use_container_width=True)
-
-            elif cat == 'PinCode':
-                if all_s:
-                    query = f'Select pincode PinCode,sum(registered_users) Registered_Users FROM top_users where year IN {year} and quarter IN {quarter} GROUP BY PinCode ORDER BY Registered_Users DESC LIMIT 10'
-
-                else:
-                    query = f'''Select pincode PinCode,sum(registered_users) Registered_Users 
-                        from (SELECT * 
-                              FROM top_users
-                              WHERE state = '{state}') sub
-                        where year IN {year} and quarter IN {quarter} GROUP BY PinCode
-                        ORDER BY Registered_Users DESC
-                        LIMIT 10'''
-                mycursor.execute(query)
-
-                df = pd.DataFrame(mycursor.fetchall(), columns=['PinCode', 'Registered_Users'])
-
-                if chart_type == 'Pie':
-                    fig = px.pie(df,
-                                 names='PinCode',
-                                 values='Registered_Users',
-                                 color='PinCode')
-
-                    fig.update_traces(textposition='inside', textinfo='percent+label')
-                    st.plotly_chart(fig,use_container_width=True)
-                else:
-                    fig = px.bar(df,
-                                 x='PinCode',
-                                 y='Registered_Users',
-                                 color='PinCode')
-
-                    st.plotly_chart(fig, use_container_width=True)
-
-elif option == 'Maps':
-    Type = st.sidebar.selectbox("**Type**", ("Select One","Transactions", "Users"))
-    st.subheader(f'Select Preferences')
-    col1, col2,col3,col4 = st.columns([0.3 ,1.1,0.3,0.5], gap="small")
-    with col1:
-        all_y = st.checkbox('All_Years', True)
-    with col2:
-        years = []
-        query = 'Select DISTINCT year From aggregate_transactions'
-        mycursor.execute(query)
-        for i in mycursor:
-            years.append(i[0])
-
-        year = st.radio('Year',years , disabled=all_y,horizontal=True)
-        year = tuple([0, year])
-        if all_y:
-            year = tuple(years)
-    with col3:
-        all_q = st.checkbox('All_Quarters', True)
-    with col4:
-        quarter = st.radio('Quarter', [1,2,3,4],disabled=all_q,horizontal=True)
-        quarter = tuple([0, quarter])
-        if all_q:
-            quarter = (1, 2, 3, 4)
+def Top_Charts():
+    st.markdown("## :violet[Top_Charts]")
+    Type = st.selectbox("**Type**", ("Transactions", "Users"))
+    colum1, colum2 = st.columns([1, 1.5], gap="large")
+    with colum1:
+        Year = st.slider("**Year**", min_value=2018, max_value=2022)
+        Quarter = st.slider("Quarter", min_value=1, max_value=4)
 
     if Type == "Transactions":
-        map,data = st.columns([2,1])
-        with map:
-            query = f'SELECT state,sum(transactions_amount) Amount, sum(Transactions_count) count FROM aggregate_transactions where year in {year} and quarter in {quarter} GROUP BY state'
-            mycursor.execute(query)
-            df = pd.DataFrame(mycursor.fetchall(), columns=['State', 'Total_Amount', 'Total_Transactions'])
-            df2 = pd.read_csv("D:\Phonepe\Phonepepulse\states.csv")
-            df['State'] = df2
+        col1, col2, col3 = st.columns([1, 1, 1], gap="small")
 
-            fig = px.choropleth(df,
+        with col1:
+            st.markdown("### :violet[State]")
+            mycursor.execute(
+                f"select state, sum(Transaction_count) as Total_Transactions_Count, sum(Transaction_amount) as Total from agg_transer where year = {Year} and quarter = {Quarter} group by state order by Total desc limit 10")
+            df = pd.DataFrame(mycursor.fetchall(), columns=['State', 'Transactions_Count', 'Total_Amount'])
+            fig = px.pie(df, values='Total_Amount',
+                         names='State',
+                         title='Top 10',
+                         color_discrete_sequence=px.colors.sequential.Agsunset,
+                         hover_data=['Transactions_Count'],
+                         labels={'Transactions_Count': 'Transactions_Count'})
+
+            fig.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+            st.markdown("### :violet[District]")
+            mycursor.execute(
+                f"select district , sum(Count) as Total_Count, sum(Amount) as Total from map_trans where year = {Year} and quarter = {Quarter} group by district order by Total desc limit 10")
+            df = pd.DataFrame(mycursor.fetchall(), columns=['District', 'Transactions_Count', 'Total_Amount'])
+
+            fig = px.pie(df, values='Total_Amount',
+                         names='District',
+                         title='Top 10',
+                         color_discrete_sequence=px.colors.sequential.Agsunset,
+                         hover_data=['Transactions_Count'],
+                         labels={'Transactions_Count': 'Transactions_Count'})
+
+            fig.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col3:
+            st.markdown("### :violet[Pincode]")
+            mycursor.execute(
+                f"select Pincode, sum(Transaction_count) as Total_Transactions_Count, sum(Transaction_amount) as Total from top_trans2 where year = {Year} and quarter = {Quarter} group by Pincode order by Total desc limit 10")
+            df = pd.DataFrame(mycursor.fetchall(), columns=['Pincode', 'Transactions_Count', 'Total_Amount'])
+            fig = px.pie(df, values='Total_Amount',
+                         names='Pincode',
+                         title='Top 10',
+                         color_discrete_sequence=px.colors.sequential.Agsunset,
+                         hover_data=['Transactions_Count'],
+                         labels={'Transactions_Count': 'Transactions_Count'})
+
+            fig.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig, use_container_width=True)
+
+    if Type == "Users":
+        col1, col2, col3, col4 = st.columns([2, 2, 2, 2], gap="large")
+
+        with col1:
+            st.markdown("### :violet[brand]")
+            if Year == 2022 and Quarter in [2, 3, 4]:
+                st.markdown("#### Sorry No Data to Display for 2022 Qtr 2,3,4")
+            else:
+                mycursor.execute(
+                    f"select brand, sum(count) as Total_Count, avg(percentage)*100 as Avg_Percentage from agg_users where year = {Year} and quarter = {Quarter} group by brand order by Total_Count desc limit 10")
+                df = pd.DataFrame(mycursor.fetchall(), columns=['Brand', 'Total_Users', 'Avg_Percentage'])
+                fig = px.bar(df,
+                             title='Top 10',
+                             x="Total_Users",
+                             y="Brand",
+                             orientation='h',
+                             color='Avg_Percentage',
+                             color_continuous_scale=px.colors.sequential.Agsunset)
+                st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+            st.markdown("### :violet[District]")
+            mycursor.execute(
+                f"select district, sum(Registered_User) as Total_Users, sum(app_opens) as Total_Appopens from map_useres where year = {Year} and quarter = {Quarter} group by district order by Total_Users desc limit 10")
+            df = pd.DataFrame(mycursor.fetchall(), columns=['District', 'Total_Users', 'Total_Appopens'])
+            df.Total_Users = df.Total_Users.astype(float)
+            fig = px.bar(df,
+                         title='Top 10',
+                         x="Total_Users",
+                         y="District",
+                         orientation='h',
+                         color='Total_Users',
+                         color_continuous_scale=px.colors.sequential.Agsunset)
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col3:
+            st.markdown("### :violet[Pincode]")
+            mycursor.execute(
+                f"select District, sum(Registered_User) as Total_Users from top_user1 where year = {Year} and quarter = {Quarter} group by District order by Total_Users desc limit 10")
+            df = pd.DataFrame(mycursor.fetchall(), columns=['Pincode', 'Total_Users'])
+            fig = px.pie(df,
+                         values='Total_Users',
+                         names='Pincode',
+                         title='Top 10',
+                         color_discrete_sequence=px.colors.sequential.Agsunset,
+                         hover_data=['Total_Users'])
+            fig.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col4:
+            st.markdown("### :violet[State]")
+            mycursor.execute(
+                f"select state, sum(Registered_user) as Total_Users, sum(App_opens) as Total_Appopens from map_useres where year = {Year} and quarter = {Quarter} group by state order by Total_Users desc limit 10")
+            df = pd.DataFrame(mycursor.fetchall(), columns=['State', 'Total_Users', 'Total_Appopens'])
+            fig = px.pie(df, values='Total_Users',
+                         names='State',
+                         title='Top 10',
+                         color_discrete_sequence=px.colors.sequential.Agsunset,
+                         hover_data=['Total_Appopens'],
+                         labels={'Total_Appopens': 'Total_Appopens'})
+
+            fig.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig, use_container_width=True)
+
+
+def Explore_Data():
+    Year = st.sidebar.slider("**Year**", min_value=2018, max_value=2022)
+    Quarter = st.sidebar.slider("Quarter", min_value=1, max_value=4)
+    Type = st.sidebar.selectbox("**Type**", ("Transactions", "Users"))
+    col1, col2 = st.columns(2)
+
+    if Type == "Transactions":
+        with col1:
+            st.markdown("## :violet[Overall State Data - Transactions Amount]")
+            mycursor.execute(
+                f"select state, sum(count) as Total_Transactions, sum(amount) as Total_amount from map_trans where year = {Year} and quarter = {Quarter} group by state order by state")
+            df1 = pd.DataFrame(mycursor.fetchall(), columns=['State', 'Total_Transactions', 'Total_amount'])
+            df2 = pd.read_csv('states.csv')
+            df1.State = df2
+
+            fig = px.choropleth(df1,
                                 geojson="https://gist.githubusercontent.com/jbrobst/56c13bbbf9d97d187fea01ca62ea5112/raw/e388c4cae20aa53cb5090210a42ebb9b765c0a36/india_states.geojson",
                                 featureidkey='properties.ST_NM',
                                 locations='State',
-                                color='Total_Amount',
-                                title = 'Transaction_Amount',
-                                color_continuous_scale='sunset')
+                                color='Total_amount',
+                                color_continuous_scale='sunset',
+                                )
 
             fig.update_geos(fitbounds="locations", visible=False)
             st.plotly_chart(fig, use_container_width=True)
 
-            fig = px.choropleth(df,
+        with col2:
+            st.markdown("## :violet[Overall State Data - Transactions Count]")
+            mycursor.execute(
+                f"select state, sum(count) as Total_Transactions, sum(amount) as Total_amount from map_trans where year = {Year} and quarter = {Quarter} group by state order by state")
+            df1 = pd.DataFrame(mycursor.fetchall(), columns=['State', 'Total_Transactions', 'Total_amount'])
+            df2 = pd.read_csv('States.csv')
+            df1.Total_Transactions = df1.Total_Transactions.astype(int)
+            df1.State = df2
+
+            fig = px.choropleth(df1,
                                 geojson="https://gist.githubusercontent.com/jbrobst/56c13bbbf9d97d187fea01ca62ea5112/raw/e388c4cae20aa53cb5090210a42ebb9b765c0a36/india_states.geojson",
                                 featureidkey='properties.ST_NM',
                                 locations='State',
                                 color='Total_Transactions',
-                                title='Total_Transactions',
                                 color_continuous_scale='sunset')
 
             fig.update_geos(fitbounds="locations", visible=False)
             st.plotly_chart(fig, use_container_width=True)
-        with data:
-            st.write("#### Transactions")
-            st.write("All Phonepe Transactions (UPIs,Wallets,Cards)")
-            query = f'SELECT sum(transactions_count) FROM aggregate_transactions where year in {year} and quarter in {quarter}'
-            mycursor.execute(query)
-            for i in mycursor:
-                x = i[0]
-            st.markdown(f"### :blue[{x}]")
 
-            col1,col2 = st.columns([1,0.8])
-            with col1:
-                st.write("Total payment Value")
-                query = f'SELECT ROUND(sum(transactions_Amount)/10000000,2) FROM aggregate_transactions where year in {year} and quarter in {quarter}'
-                mycursor.execute(query)
-                for i in mycursor:
-                    x = i[0]
-                st.markdown(f"#### :blue[{x} Cr]")
-            with col2:
-                st.write("Avg.Trans Value")
-                query = f'SELECT ROUND(sum(transactions_amount)/sum(transactions_count),2) FROM aggregate_transactions where year in {year} and quarter in {quarter}'
-                mycursor.execute(query)
-                for i in mycursor:
-                    x = i[0]
-                st.markdown(f"#### :blue[₹{x}]")
+            st.markdown("## :violet[Top Payment Type]")
+            mycursor.execute(
+                f"select Transaction_type, sum(Transaction_count) as Total_Transactions, sum(Transaction_amount) as Total_amount from agg_transer where year= {Year} and quarter = {Quarter} group by transaction_type order by Transaction_type")
+            df = pd.DataFrame(mycursor.fetchall(), columns=['Transaction_type', 'Total_Transactions', 'Total_amount'])
 
+            fig = px.bar(df,
+                         title='Transaction Types vs Total_Transactions',
+                         x="Transaction_type",
+                         y="Total_Transactions",
+                         orientation='v',
+                         color='Total_amount',
+                         color_continuous_scale=px.colors.sequential.Agsunset)
+            st.plotly_chart(fig, use_container_width=False)
 
-            st.write('#### Categories')
-            query = f'SELECT Transaction_type,ROUND(sum(transactions_Amount)/10000000,2) amount FROM aggregate_transactions where year in {year} and quarter in {quarter} GROUP BY Transaction_type '
-            mycursor.execute(query)
-            for i in mycursor:
-                col1,col2 = st.columns([1.3,0.7])
-                with col1:
-                    st.write(i[0])
-                with col2:
-                    st.write(f'###### :blue[₹{i[1]} Cr]')
+            st.markdown("# ")
+            st.markdown("# ")
+            st.markdown("# ")
+            st.markdown("## :violet[Select any State to explore more]")
+            selected_state = st.selectbox("",
+                                          ('andaman-&-nicobar-islands', 'andhra-pradesh', 'arunachal-pradesh', 'assam',
+                                           'bihar',
+                                           'chandigarh', 'chhattisgarh', 'dadra-&-nagar-haveli-&-daman-&-diu', 'delhi',
+                                           'goa', 'gujarat', 'haryana',
+                                           'himachal-pradesh', 'jammu-&-kashmir', 'jharkhand', 'karnataka', 'kerala',
+                                           'ladakh', 'lakshadweep',
+                                           'madhya-pradesh', 'maharashtra', 'manipur', 'meghalaya', 'mizoram',
+                                           'nagaland', 'odisha', 'puducherry', 'punjab', 'rajasthan', 'sikkim',
+                                           'tamil-nadu', 'telangana', 'tripura', 'uttar-pradesh', 'uttarakhand',
+                                           'west-bengal'), index=30)
 
-            tab1,tab2,tab3 = st.tabs(['State','District','Pincode'])
-            with tab1:
-                st.write('#### Top 10 states')
-                query = f'SELECT state,ROUND(sum(transactions_Amount)/10000000,2) amount FROM aggregate_transactions where year in {year} and quarter in {quarter} GROUP BY state ORDER BY amount DESC LIMIT 10'
-                mycursor.execute(query)
-                for i in mycursor:
-                    col1, col2 = st.columns([1.3, 0.7])
-                    with col1:
-                        st.write(i[0])
-                    with col2:
-                        st.write(f'###### :blue[₹{i[1]} Cr]')
-            with tab2:
-                st.write('#### Top 10 Districts')
-                query = f'SELECT district,ROUND(sum(transactions_Amount)/10000000,2) amount FROM map_transactions where year in {year} and quarter in {quarter} GROUP BY district ORDER BY amount DESC LIMIT 10'
-                mycursor.execute(query)
-                for i in mycursor:
-                    col1, col2 = st.columns([1.3, 0.7])
-                    with col1:
-                        st.write(i[0])
-                    with col2:
-                        st.write(f'###### :blue[₹{i[1]} Cr]')
-            with tab3:
-                st.write('#### Top 10 PinCodes')
-                query = f'SELECT pincode,ROUND(sum(transactions_Amount)/10000000,2) amount FROM top_transactions where year in {year} and quarter in {quarter} GROUP BY pincode ORDER BY amount DESC LIMIT 10'
-                mycursor.execute(query)
-                for i in mycursor:
-                    col1, col2 = st.columns([1.3, 0.7])
-                    with col1:
-                        st.write(f'##### {i[0]}')
-                    with col2:
-                        st.write(f'###### :blue[₹{i[1]} Cr]')
+            mycursor.execute(
+                f"select State, District,year,quarter, sum(count) as Total_Transactions, sum(amount) as Total_amount from map_trans where year = {Year} and quarter = {Quarter} and State = '{selected_state}' group by State, District,year,quarter order by state,district")
+
+            df1 = pd.DataFrame(mycursor.fetchall(), columns=['State', 'District', 'Year', 'Quarter',
+                                                             'Total_Transactions', 'Total_amount'])
+            fig = px.bar(df1,
+                         title=selected_state,
+                         x="District",
+                         y="Total_Transactions",
+                         orientation='v',
+                         color='Total_amount',
+                         color_continuous_scale=px.colors.sequential.Agsunset)
+            st.plotly_chart(fig, use_container_width=True)
 
     if Type == "Users":
-        map,data = st.columns([2,1])
-        with map:
-            query = f'SELECT state,sum(registered_users) total_users, sum(app_opens) total_appopens FROM map_users where year in {year} and quarter in {quarter} GROUP BY state'
-            mycursor.execute(query)
-            df = pd.DataFrame(mycursor.fetchall(), columns=['State', 'total_users', 'total_appopens'])
-            df2 = pd.read_csv("D:\Phonepe\Phonepepulse\states.csv")
-            df['State'] = df2
+        st.markdown("## :violet[Overall State Data - User App opening frequency]")
+        mycursor.execute(
+            f"select State, sum(Registered_user) as Total_Users, sum(App_opens) as Total_Appopens from map_useres where year = {Year} and quarter = {Quarter} group by State order by State")
+        df3 = pd.DataFrame(mycursor.fetchall(), columns=['State', 'Total_Users', 'Total_Appopens'])
+        df4 = pd.read_csv('states.csv')
+        df3.Total_Appopens = df3.Total_Appopens.astype(float)
+        df3.State = df4
 
-            fig = px.choropleth(df,
-                                geojson="https://gist.githubusercontent.com/jbrobst/56c13bbbf9d97d187fea01ca62ea5112/raw/e388c4cae20aa53cb5090210a42ebb9b765c0a36/india_states.geojson",
-                                featureidkey='properties.ST_NM',
-                                locations='State',
-                                color='total_users',
-                                title = 'Registered Users',
-                                color_continuous_scale='YlOrRd')
+        fig = px.choropleth(df3,
+                            geojson="https://gist.githubusercontent.com/jbrobst/56c13bbbf9d97d187fea01ca62ea5112/raw/e388c4cae20aa53cb5090210a42ebb9b765c0a36/india_states.geojson",
+                            featureidkey='properties.ST_NM',
+                            locations='State',
+                            color='Total_Appopens',
+                            color_continuous_scale='sunset')
 
-            fig.update_geos(fitbounds="locations", visible=False)
-            st.plotly_chart(fig, use_container_width=True)
+        fig.update_geos(fitbounds="locations", visible=False)
+        st.plotly_chart(fig, use_container_width=True)
 
-            fig = px.choropleth(df,
-                                geojson="https://gist.githubusercontent.com/jbrobst/56c13bbbf9d97d187fea01ca62ea5112/raw/e388c4cae20aa53cb5090210a42ebb9b765c0a36/india_states.geojson",
-                                featureidkey='properties.ST_NM',
-                                locations='State',
-                                color='total_appopens',
-                                title='App_Opens',
-                                color_continuous_scale='YlOrRd')
+        st.markdown("## :violet[Select any State to explore more]")
+        selected_state = st.selectbox("",
+                                      ('andaman-&-nicobar-islands', 'andhra-pradesh', 'arunachal-pradesh', 'assam',
+                                       'bihar',
+                                       'chandigarh', 'chhattisgarh', 'dadra-&-nagar-haveli-&-daman-&-diu', 'delhi',
+                                       'goa', 'gujarat', 'haryana',
+                                       'himachal-pradesh', 'jammu-&-kashmir', 'jharkhand', 'karnataka', 'kerala',
+                                       'ladakh', 'lakshadweep',
+                                       'madhya-pradesh', 'maharashtra', 'manipur', 'meghalaya', 'mizoram',
+                                       'nagaland', 'odisha', 'puducherry', 'punjab', 'rajasthan', 'sikkim',
+                                       'tamil-nadu', 'telangana', 'tripura', 'uttar-pradesh', 'uttarakhand',
+                                       'west-bengal'), index=30)
 
-            fig.update_geos(fitbounds="locations", visible=False)
-            st.plotly_chart(fig, use_container_width=True)
+        mycursor.execute(
+            f"select State,year,quarter,District,sum(Registered_user) as Total_Users, sum(App_opens) as Total_Appopens from map_useres where year = {Year} and quarter = {Quarter} and state = '{selected_state}' group by State, District,year,quarter order by state,district")
 
-        with data:
-            st.write("#### Users")
-            col1,col2 = st.columns(2)
-            with col1:
-                st.write("Total Registered Users")
-                query = f'SELECT sum(registered_users) FROM map_users where year in {year} and quarter in {quarter}'
-                mycursor.execute(query)
-                for i in mycursor:
-                    x = i[0]
-                st.markdown(f"### :blue[{x}]")
-            with col2:
-                st.write("Total App opens")
-                query = f'SELECT sum(app_opens) FROM map_users where year in {year} and quarter in {quarter}'
-                mycursor.execute(query)
-                for i in mycursor:
-                    x = i[0]
-                st.markdown(f"### :blue[{x}]")
+        df5 = pd.DataFrame(mycursor.fetchall(),
+                           columns=['State', 'year', 'quarter', 'District', 'Total_Users', 'Total_Appopens'])
+        df5.Total_Users = df5.Total_Users.astype(int)
 
-            tab1,tab2,tab3 = st.tabs(['State','District','Pincode'])
-            with tab1:
-                st.write('#### Top 10 states')
-                query = f'SELECT state,ROUND(sum(registered_users)/10000000,2) count FROM map_users where year in {year} and quarter in {quarter} GROUP BY state ORDER BY count DESC LIMIT 10'
-                mycursor.execute(query)
-                for i in mycursor:
-                    col1, col2 = st.columns([1.3, 0.7])
-                    with col1:
-                        st.write(i[0])
-                    with col2:
-                        st.write(f'###### :blue[₹{i[1]} Cr]')
-            with tab2:
-                st.write('#### Top 10 Districts')
-                query = f'SELECT district,ROUND(sum(registered_users)/10000000,2) amount FROM map_users where year in {year} and quarter in {quarter} GROUP BY district ORDER BY amount DESC LIMIT 10'
-                mycursor.execute(query)
-                for i in mycursor:
-                    col1, col2 = st.columns([1.3, 0.7])
-                    with col1:
-                        st.write(i[0])
-                    with col2:
-                        st.write(f'###### :blue[₹{i[1]} Cr]')
-            with tab3:
-                st.write('#### Top 10 PinCodes')
-                query = f'SELECT pincode,ROUND(sum(registered_users)/10000000,2) amount FROM top_users where year in {year} and quarter in {quarter} GROUP BY pincode ORDER BY amount DESC LIMIT 10'
-                mycursor.execute(query)
-                for i in mycursor:
-                    col1, col2 = st.columns([1.3, 0.7])
-                    with col1:
-                        st.write(f'##### {i[0]}')
-                    with col2:
-                        st.write(f'###### :blue[₹{i[1]} Cr]')
+        fig = px.bar(df5,
+                     title=selected_state,
+                     x="District",
+                     y="Total_Users",
+                     orientation='v',
+                     color='Total_Users',
+                     color_continuous_scale=px.colors.sequential.Agsunset)
+        st.plotly_chart(fig, use_container_width=True)
+
+
+if __name__ == '__main__':
+    set_page_config()
+
+    selected = selection()
+    if selected == "Home":
+        Home()
+    elif selected == "Top_Charts":
+        Top_Charts()
+
+    elif selected == "Explore_Data":
+        Explore_Data()
+
+
 
 
