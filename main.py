@@ -1,7 +1,5 @@
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
 import numpy as np
-import requests
 import json
 import os
 import mysql.connector as mysql
@@ -10,11 +8,13 @@ import streamlit as st
 import plotly.express as px
 from PIL import Image
 import sklearn
+from sklearn.preprocessing import LabelEncoder
 
 mydb = mysql.connect(host="localhost",
                      user="root",
                      password="Aaru@123user",
-                     database="phonepe_pulse"
+                     database="phonepe_pulse",
+                     port=3306
                      )
 mycursor = mydb.cursor(buffered=True)
 
@@ -313,7 +313,3 @@ if __name__ == '__main__':
 
     elif selected == "Explore_Data":
         Explore_Data()
-
-
-
-
